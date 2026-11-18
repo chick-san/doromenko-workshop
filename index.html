@@ -53,7 +53,8 @@ h2{font-size:20px;margin:0 0 7px}.lead{color:var(--muted);font-size:14px;margin:
 <section class="panel hidden center" id="confirmPanel">
 <h2>③ この模様で彫刻する？</h2><p class="lead">線の形を確認してね。よければ彫刻をスタート！</p>
 <canvas id="previewCanvas" width="500" height="500" style="width:min(100%,390px);aspect-ratio:1;border-radius:50%;background:#d9b58c;box-shadow:inset 3px 3px 10px #8e603d55"></canvas>
-<div class="bottom-actions"><button class="btn" id="editAgain">← 描き直す</button><button class="btn accent" id="startEngrave">彫刻スタート！</button></div>
+<div class="bottom-actions"><button class="btn" id="editAgain">← 描き直す</button><button class="btn" id="exportSvg">SVGを書き出す</button><button class="btn accent" id="startEngrave">彫刻スタート！</button></div>
+<p class="muted" style="font-size:12px;line-height:1.6;margin:12px 0 0">SVGには描いた線のベクターデータが保存されます。NC加工用ソフト（CAM）で読み込み、工具経路や加工条件を設定して使用します。</p>
 </section>
 
 <section class="panel hidden center" id="engravePanel">
@@ -67,7 +68,7 @@ h2{font-size:20px;margin:0 0 7px}.lead{color:var(--muted);font-size:14px;margin:
 <canvas id="doneCanvas" width="500" height="500" style="width:min(100%,390px);aspect-ratio:1;border-radius:50%;background:#d9b58c;box-shadow:inset 3px 3px 10px #8e603d55"></canvas>
 <div class="bottom-actions"><span></span><button class="btn primary" id="newOne">もう一度つくる</button></div>
 </section>
-<div class="footer">泥めんこ工房｜体験用プロトタイプ　※実際のNC装置とは接続されていません</div>
+<div class="footer">泥めんこ工房｜体験用プロトタイプ　※彫刻表示はシミュレーションです。SVG出力データはNC加工用ソフト（CAM）で加工設定を行って使用します。</div>
 </div>
 <script>
 (()=>{
@@ -106,6 +107,24 @@ $('undo').onclick=()=>{strokes.pop();redraw();};$('clear').onclick=()=>{strokes=
 $('backToShape').onclick=()=>show('choosePanel','STEP 1｜かたちを選ぶ');
 $('confirm').onclick=()=>{let c=$('previewCanvas').getContext('2d');base(c,500,500,shape);renderStrokes(c,500,500,strokes);show('confirmPanel','STEP 3｜デザイン確認');};
 $('editAgain').onclick=()=>show('drawPanel','STEP 2｜模様を描く');
+function exportSVG(){
+ const physicalSize=50; // CAMで扱いやすいよう、SVGの実寸を50 mm角に設定
+ const scale=physicalSize/700;
+ const paths=strokes.filter(st=>st.length>0).map(st=>{
+  const d=st.map((p,i)=>(i===0?'M':'L')+' '+(p.x*scale).toFixed(3)+' '+(p.y*scale).toFixed(3)).join(' ');
+  return '<path d="'+d+'" />';
+ }).join('\n  ');
+ const svg='<?xml version="1.0" encoding="UTF-8"?>\n'+
+  '<svg xmlns="http://www.w3.org/2000/svg" width="'+physicalSize+'mm" height="'+physicalSize+'mm" viewBox="0 0 '+physicalSize+' '+physicalSize+'">\n'+
+  '  <title>泥めんこ彫刻データ</title>\n'+
+  '  <desc>タブレットで描いた線の中心線データ。実加工前にCAMで工具経路と加工条件を設定してください。</desc>\n'+
+  '  <g id="engraving-centerlines" fill="none" stroke="#000000" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round">\n  '+paths+'\n  </g>\n</svg>';
+ const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
+ const url=URL.createObjectURL(blob);const a=document.createElement('a');
+ a.href=url;a.download='doromenko_engraving.svg';document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('exportSvg').onclick=exportSVG;
 function start(){show('engravePanel','STEP 4｜NC彫刻中');let c=$('engraveCanvas').getContext('2d');base(c,500,500,shape);$('progress').style.width='0%';$('progressText').textContent='加工準備中';let start=performance.now(),duration=Math.max(4000,strokes.reduce((a,s)=>a+s.length,0)*9);if(animFrame)cancelAnimationFrame(animFrame);
  function frame(now){let p=Math.min(1,(now-start)/duration);c.clearRect(0,0,500,500);base(c,500,500,shape);renderStrokes(c,500,500,strokes,p,'#57351f',1.15);$('progress').style.width=(p*100)+'%';$('progressText').textContent=Math.round(p*100)+'% 完了';$('machineMessage').textContent=p<1?'彫刻ヘッドが線をたどっています…':'彫刻が完了しました！';if(p<1)animFrame=requestAnimationFrame(frame);else setTimeout(()=>{let d=$('doneCanvas').getContext('2d');base(d,500,500,shape);renderStrokes(d,500,500,strokes,1);show('donePanel','完成！｜できあがり');},500);}
  animFrame=requestAnimationFrame(frame);}
